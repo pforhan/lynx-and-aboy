@@ -37,10 +37,9 @@ void lynx_video_init(uint8_t *buf)
   LYNX_PBKUP = 41;
 
   // Color, 4bpp, no flip, DMA on.
-  LYNX_DISPCTL = LYNX_DISPCTL_COLOR | LYNX_DISPCTL_FOURBIT | LYNX_DISPCTL_ENABLE;
-
   LYNX_DISPADR_L = (uint16_t)buf & 0x00FF;
   LYNX_DISPADR_H = ((uint16_t)buf >> 8) & 0x00FF;
+  LYNX_DISPCTL = LYNX_DISPCTL_COLOR | LYNX_DISPCTL_FOURBIT | LYNX_DISPCTL_ENABLE;
 }
 
 void lynx_swap_display(const uint8_t *buf)
@@ -50,24 +49,49 @@ void lynx_swap_display(const uint8_t *buf)
   LYNX_DISPADR_H = ((uint16_t)buf >> 8) & 0x00FF;
 }
 
+// ---------------------------------------------------------------------------
+// Clock
+// ---------------------------------------------------------------------------
+
+// The Lynx has no free-running millisecond clock we can trust reliably, so we
+// count screen refreshes: each VBL from the vertical line counter (TIM2) is
+// one frame, and the panel runs at 75 VBLs/second.
+//
+// IMPORTANT: the VBL flag is also consumed by lynx_wait_for_frame()/swap, so
+// the shared counter below is the single source of truth. Polling it here
+// (from millis()) decouples the clock from the render/swap path -- otherwise
+// the clock can never advance until a frame is rendered, and a frame can
+// never be rendered until the clock advances.
+
+static unsigned long vblCount = 0;
+
+// INTRST bit 2 = TIM2 (vertical line counter) timeout.
+#define LYNX_VBL_FLAG 0x04
+
+// Poll the VBL done flag once; folds any new frame into vblCount.
+static void poll_vbl(void)
+{
+  if (LYNX_INTRST & LYNX_VBL_FLAG)
+  {
+    LYNX_INTRST = LYNX_VBL_FLAG;
+    vblCount++;
+  }
+}
+
 void lynx_wait_for_frame(void)
 {
-  uint8_t v;
+  // Wait until at least one *new* VBL has been counted, so the renderer
+  // paces itself against the display refresh even if it races the clock.
+  unsigned long target = vblCount + 1;
   unsigned long t0 = lynx_millis();
   uint16_t spins = 0;
 
-  // INTRST bit 2 = TIM2 (vertical line counter) timeout. The flag is latched
-  // once per frame; we wait for it, then clear only TIM2's bit.
-  do
+  while (vblCount < target)
   {
-    v = LYNX_INTRST;
-    if (v & 0x04)
-    {
-      LYNX_INTRST = 0x04;
-      return;
-    }
-    // Never stall the renderer: bail if the frame edge hasn't latched within
-    // 200ms of (TIM4) clock time, or after a CPU spin cap.
+    poll_vbl();
+
+    // Never stall the renderer: bail if a frame edge hasn't latched within
+    // 200ms of clock time, or after a CPU spin cap.
     if ((unsigned long)(lynx_millis() - t0) >= 200UL)
     {
       return;
@@ -75,21 +99,16 @@ void lynx_wait_for_frame(void)
   } while (++spins != 0);
 }
 
-// ---------------------------------------------------------------------------
-// Clock
-// ---------------------------------------------------------------------------
-
-// TIM4 = the serial baud timer on the Lynx. We never use serial, so it owns
-// the millis() clock: 1us ticking, reload 255, count+reload.
-// Each full period = 256us of real time.
 #define CLK_PERIOD_US 256UL
 #define CLK_TIMER 4
 
-static unsigned long microsBase;      // us accounted for at poll boundaries
+static unsigned long microsBase;      // us accounted at poll boundaries
+
 
 void lynx_clock_init(void)
 {
   microsBase = 0;
+  vblCount = 0;
 
   LYNX_TBKUP(CLK_TIMER) = 255;
   LYNX_TCTLA(CLK_TIMER) =
@@ -123,7 +142,10 @@ unsigned long lynx_micros(void)
 
 unsigned long lynx_millis(void)
 {
-  return lynx_micros() / 1000;
+  poll_vbl();
+
+  // 75 VBLs per second -> 1 VBL = 13.333 ms
+  return (vblCount * 1000UL) / 75UL;
 }
 
 // ---------------------------------------------------------------------------

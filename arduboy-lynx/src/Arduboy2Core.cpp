@@ -9,6 +9,7 @@
  */
 
 #include "Arduboy2Core.h"
+#include "Arduboy2.h"
 
 #include "Lynx.h"
 
@@ -81,11 +82,43 @@ static void fillWindow(uint8_t nibble, uint8_t y0, uint8_t y1)
 
   for (uint8_t r = y0; r < y1; r++)
   {
-    uint8_t *p = back + (((uint16_t)WINDOW_Y + r) * FB_STRIDE) + WINDOW_X;
+    uint8_t *p = back + (((uint16_t)WINDOW_Y + r) * FB_STRIDE) + (WINDOW_X >> 1);
     for (uint8_t x = 0; x < WINDOW_W / 2; x++)
     {
       *p++ = v;
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Border: 1px outline just outside the Arduboy window on the Lynx panel.
+// Sits on the back buffer so it survives the double-buffer swap.
+// column of the pixel and nibble accordingly.
+// ---------------------------------------------------------------------------
+static void drawWindowBorder(uint8_t *buf)
+{
+  uint8_t b = INK_MONO;
+
+  // Top and bottom edges span the window's full pixel width (x = 16..143),
+  // one pixel above/below (y = 18 and y = 83).
+  uint8_t val = (uint8_t)((b << 4) | b);
+  for (uint8_t x = 0; x < WINDOW_W / 2; x++)
+  {
+    uint8_t *top = buf + ((uint16_t)(WINDOW_Y - 1) * FB_STRIDE) + (WINDOW_X >> 1) + x;
+    uint8_t *bot = buf + ((uint16_t)(WINDOW_Y + WINDOW_H) * FB_STRIDE) + (WINDOW_X >> 1) + x;
+    *top = val;
+    *bot = val;
+  }
+
+  // Left edge at x = WINDOW_X-1 (odd pixel -> low nibble).
+  // Right edge at x = WINDOW_X+WINDOW_W (even pixel -> high nibble).
+  uint8_t leftByte = (uint8_t)((WINDOW_X - 1) >> 1);
+  uint8_t rightByte = (uint8_t)((WINDOW_X + WINDOW_W) >> 1);
+  for (uint8_t r = 0; r < WINDOW_H; r++)
+  {
+    uint8_t *line = buf + ((uint16_t)(WINDOW_Y + r) * FB_STRIDE);
+    line[leftByte] = (uint8_t)(line[leftByte] & 0xF0) | b;
+    line[rightByte] = (uint8_t)(line[rightByte] & 0x0F) | (b << 4);
   }
 }
 
@@ -96,27 +129,30 @@ static void fillWindow(uint8_t nibble, uint8_t y0, uint8_t y1)
 void Arduboy2Core::paintScreen(uint8_t image[], bool clear)
 {
   uint8_t *back = lynx_back_fb();
-  uint8_t x, r;
+  uint16_t x, r;
+
+  // Outline the Arduboy window so the Lynx panel shows where content lives.
+  drawWindowBorder(back);
 
   for (r = 0; r < WINDOW_H; r++)
   {
     uint8_t srcRow = vFlip ? (uint8_t)((WINDOW_H - 1) - r) : r;
     uint8_t bit = (uint8_t)(1U << (srcRow & 7));
-    uint8_t *line = back + (((uint16_t)WINDOW_Y + r) * FB_STRIDE) + WINDOW_X;
+    uint16_t rowOffset = (uint16_t)(srcRow >> 3) * WINDOW_W;
+    uint8_t *line = back + ((uint16_t)(WINDOW_Y + r) * FB_STRIDE) + (WINDOW_X >> 1);
 
     for (x = 0; x < WINDOW_W; x += 2)
     {
-      uint8_t gx0 = x;
-      uint8_t gx1 = (uint8_t)(x + 1);
+      uint16_t gx0 = x;
+      uint16_t gx1 = x + 1;
       if (hFlip)
       {
-        gx0 = (uint8_t)((WINDOW_W - 1) - x);
-        gx1 = (uint8_t)((WINDOW_W - 1) - (x + 1));
+        gx0 = (uint16_t)((WINDOW_W - 1) - x);
+        gx1 = (uint16_t)((WINDOW_W - 1) - (x + 1));
       }
 
-      uint8_t base = (uint8_t)((srcRow >> 3) * WINDOW_W);
-      uint8_t p0 = image[base + gx0];
-      uint8_t p1 = image[base + gx1];
+      uint8_t p0 = image[rowOffset + gx0];
+      uint8_t p1 = image[rowOffset + gx1];
 
       uint8_t v0 = alphaPixel(r, (p0 & bit) != 0);
       uint8_t v1 = alphaPixel(r, (p1 & bit) != 0);
@@ -194,6 +230,8 @@ void Arduboy2Core::paint8Pixels(uint8_t pixels)
 
 void Arduboy2Core::blank()
 {
+  // Clear the 1bpp source buffer first.
+  memset(Arduboy2Base::sBuffer, 0, (HEIGHT*WIDTH)/8);
   fillWindow(INK_OFF, 0, WINDOW_H);
 }
 
@@ -324,6 +362,7 @@ void Arduboy2Core::boot()
   richMode = false;
   cursorX = 0;
   cursorY = 0;
+
   fillWindow(INK_OFF, 0, WINDOW_H);
 }
 

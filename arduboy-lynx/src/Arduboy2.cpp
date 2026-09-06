@@ -10,7 +10,7 @@
 //========== class Arduboy2Base ==========
 //========================================
 
-uint8_t Arduboy2Base::sBuffer[];
+uint8_t Arduboy2Base::sBuffer[(HEIGHT*WIDTH)/8];
 
 uint16_t Arduboy2Base::frameCount = 0;
 
@@ -18,8 +18,8 @@ uint8_t Arduboy2Base::currentButtonState = 0;
 uint8_t Arduboy2Base::previousButtonState = 0;
 
 uint8_t Arduboy2Base::eachFrameMillis = 16;
-uint8_t Arduboy2Base::thisFrameStart;
-uint8_t Arduboy2Base::lastFrameDurationMs;
+unsigned long Arduboy2Base::thisFrameStart;
+unsigned long Arduboy2Base::lastFrameDurationMs;
 bool Arduboy2Base::justRendered = false;
 
 // functions called here should be public so users can create their
@@ -236,8 +236,8 @@ bool Arduboy2Base::everyXFrames(uint8_t frames)
 
 bool Arduboy2Base::nextFrame()
 {
-  uint8_t now = (uint8_t) millis();
-  uint8_t frameDurationMs = now - thisFrameStart;
+  unsigned long now = millis();
+  unsigned long frameDurationMs = now - thisFrameStart;
 
   if (justRendered) {
     lastFrameDurationMs = frameDurationMs;

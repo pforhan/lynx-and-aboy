@@ -1516,8 +1516,8 @@ class Arduboy2Base : public Arduboy2Core
 
   // For frame functions
   static uint8_t eachFrameMillis;
-  static uint8_t thisFrameStart;
-  static uint8_t lastFrameDurationMs;
+  static unsigned long thisFrameStart;
+  static unsigned long lastFrameDurationMs;
   static bool justRendered;
 
   // ----- Map of EEPROM addresses for system use-----
