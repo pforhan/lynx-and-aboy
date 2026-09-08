@@ -1,0 +1,86 @@
+# Known Issues
+
+Definite bugs, gaps, and hazards. Each has an ID (`I-`), a severity, the
+evidence so far, and a passing acceptance criterion. Progress is tracked in
+[ROADMAP.md](./ROADMAP.md).
+
+## I-1 (HIGH): Everything renders green
+
+- *Symptom:* the demo draws full-white `0x07` pixels, but the
+  panel/emulator shows everything green (or shades of green), even though
+  `INK_MONO` is `0x07` (bits 0-2 set = white in GRB).
+- *Notes:* the code paths themselves look internally consistent (even-x =
+  high nibble, odd-x = low nibble in both `paintScreen()` and
+  `paint8Pixels()`).
+- *Hypotheses to rule out, in order:*
+  1. **Emulator interpretation** — the Beetle Lynx core may render the 4bpp
+     GRB nibbles differently than documented (needs a cross-check against a
+     second emulator and, ideally, one known-good hardware screenshot).
+  2. **DISPCTL mode** — verify we're actually in 4-bit mode (`DISPCTL =
+     0x0D`) and not 2-bit (`0x05`), where the color interpretation collapses
+     and only some nibbles survive.
+  3. **Nibble/packing endianness on the panel** — even-x vs odd-x high/low
+     nibble assignment may be inverted on real silicon vs. the emulator we
+     developed against.
+  4. **Color enable bit** — double-check `DISPCTL_COLOR` vs. mono mode; if
+     we ended up in mono 2-bit, the GRB encoding isn't applied at all.
+- *Acceptance:* after any fix, the manual color checklist in
+  [NOTES.md](./NOTES.md) passes on at least two emulator cores, with
+  `mednafen`'s exact-framebuffer snapshot (`F9`) confirming pure-white is
+  truly white.
+
+## I-2 (HIGH): ~5 FPS in the Lynx emulator, target 59.9
+
+- *Symptom:* ~5 FPS measured in Mednafen 1.29.0 / Beetle Lynx (treat as an
+  indication, not a spec, until re-measured — see
+  [Q-6](OPEN_QUESTIONS.md#q-6)).
+- *Likely contributors, in priority order:*
+  1. Per-pixel 1bpp→4bpp expansion in software (`paintScreen()`, ~4096
+     pixel-pair bytes/frame); no 65C02 SIMD.
+  2. Per-frame `drawWindowBorder()` (extra 128+64 byte ops).
+  3. Busy-polling the frame/clock (CPU never idle).
+  4. Emulator overhead compounding (Beetle Lynx core).
+- *Ideas:* profile the hot loop; precompute nibble pairs per row to avoid
+  the `alphaPixel`/palette function call per pixel; defer the border to a
+  single setup pass rather than every paint.
+- *Acceptance:* the demo holds a steady FPS (measured over >100 frames)
+  with no tearing/flicker, at whatever capped rate
+  [Q-6](OPEN_QUESTIONS.md#q-6) decides.
+
+## I-3 (MEDIUM): No automated visual/behavior verification
+
+- *Symptom:* nothing asserts that a frame looks like what we think it does,
+  or that button mappings produce the right game behavior. Emulator smoke
+  ("it loads") is the only gate so far.
+- *Desired:* a deterministic framebuffer-diff test (golden frame bytes), a
+  button-mapping unit test, and a clock-accuracy test for `millis()` /
+  `micros()`.
+- *Acceptance:* `make test` (or the documented test command) passes on a
+  clean checkout.
+
+## I-4 (LOW): Border is duplicated/pointless in mono
+
+The window outline is always full-white. In default black-and-white mode it's
+indistinguishable from the content boundary; only in rich mode does it add
+value. Decide in [Q-4](OPEN_QUESTIONS.md#q-4) whether to keep, style, or drop
+it.
+
+## I-5 (LOW): Tone-period edge case
+
+`lynx_tone_square` clamps `count = 0` (impossible 1 MHz) low by ~4x rather
+than failing loudly; the high end clamps at the lowest representable
+frequency. Host-verified that all in-range periods are exact; the clamps are a
+silent-accuracy gap worth a comment or warning.
+
+## I-6 (LOW): EEPROM is volatile
+
+The EEPROM shim is RAM-backed (1024 bytes), so game saves vanish on
+power-off. Inherent to the Lynx, but undocumented for users who expect
+persistence. Document it and consider a cartridge-RAM-backed option.
+
+## I-7 (INFO): Zero-page / BLL layout trap
+
+- **Fixed** in the current link script, but easy to regress: initialized
+  `.zp.data` becoming `payload[0]` boots into the BIOS "INSERT GAME" loop.
+- Add a build-time assertion that `payload[0]` is `_start` and a smoke test
+  that enforces it. See the "Zero-page data trap" in [NOTES.md](./NOTES.md).

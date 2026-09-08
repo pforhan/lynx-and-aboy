@@ -13,7 +13,10 @@
 */
 
 #include <Arduboy2.h>
+
+#ifdef __LYNX__
 #include "Lynx.h"
+#endif
 
 Arduboy2 arduboy;
 BeepPin1 beep;

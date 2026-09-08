@@ -13,6 +13,17 @@ It works by keeping the entire platform-neutral game engine from Arduboy2
 hardware layer — `Arduboy2Core` plus a small Arduino-compatible shim — that
 drives the Lynx's Mikey/Suzy chips instead of the Atmega32u4/SSD1306.
 
+## Documentation
+
+| File | Contents |
+| --- | --- |
+| [GOALS.md](./GOALS.md) | Project mission and principles (`G-*`) |
+| [OPEN_QUESTIONS.md](./OPEN_QUESTIONS.md) | Design decisions not yet settled (`Q-*`) |
+| [KNOWN_ISSUES.md](./KNOWN_ISSUES.md) | Bugs, gaps, and hazards (`I-*`) |
+| [ROADMAP.md](./ROADMAP.md) | Discrete, testable work items in order |
+| [CONTRIBUTING.md](./CONTRIBUTING.md) | Scoped first issues and process |
+| [NOTES.md](./NOTES.md) | Register-level hardware/dev research |
+
 ## Features
 
 - 128x64 Arduboy game buffer centered on the Lynx's 160x102 panel
@@ -129,3 +140,10 @@ The Lynx port builds the shared demo end-to-end (`build/build-lynx.sh` →
 emulates in recent Mednafen. Remaining: an eyeball check of the demo on an
 emulator and on real hardware (see the manual checklist in `NOTES.md`), plus
 the follow-up ArduboyTones port.
+
+**Known blockers:** [I-1](KNOWN_ISSUES.md#i-1) (everything renders green) and
+[I-2](KNOWN_ISSUES.md#i-2) (~5 FPS vs 59.9 target) — both block the
+"playable as-is" claim. The biggest open decision is
+[Q-1](OPEN_QUESTIONS.md#q-1) (what "seamless" means). Scoped candidate work,
+including the `G-6` tooling pre-flight check and `I-3` host tests, is in
+[CONTRIBUTING.md](./CONTRIBUTING.md) and [ROADMAP.md](./ROADMAP.md).
