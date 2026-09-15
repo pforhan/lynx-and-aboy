@@ -29,11 +29,10 @@ evidence so far, and a passing acceptance criterion. Progress is tracked in
   `mednafen`'s exact-framebuffer snapshot (`F9`) confirming pure-white is
   truly white.
 
-## I-2 (HIGH): ~5 FPS in the Lynx emulator, target 59.9
+## I-2 (HIGH): ~5 FPS in the Lynx emulator, target ~30
 
 - *Symptom:* ~5 FPS measured in Mednafen 1.29.0 / Beetle Lynx (treat as an
-  indication, not a spec, until re-measured — see
-  [Q-6](OPEN_QUESTIONS.md#q-6)).
+  indication, not a spec, until re-measured — see ROADMAP step 1).
 - *Likely contributors, in priority order:*
   1. Per-pixel 1bpp→4bpp expansion in software (`paintScreen()`, ~4096
      pixel-pair bytes/frame); no 65C02 SIMD.
@@ -43,9 +42,10 @@ evidence so far, and a passing acceptance criterion. Progress is tracked in
 - *Ideas:* profile the hot loop; precompute nibble pairs per row to avoid
   the `alphaPixel`/palette function call per pixel; defer the border to a
   single setup pass rather than every paint.
-- *Acceptance:* the demo holds a steady FPS (measured over >100 frames)
-  with no tearing/flicker, at whatever capped rate
-  [Q-6](OPEN_QUESTIONS.md#q-6) decides.
+- *Target:* [D-Q6](./DECISIONS.md) sets **~30 FPS as the realistic first
+  milestone**, pushing as high as we can over time.
+- *Acceptance:* the demo holds a steady FPS at/above the D-Q6 target
+  (measured over >100 frames) with no tearing/flicker.
 
 ## I-3 (MEDIUM): No automated visual/behavior verification
 
@@ -58,12 +58,14 @@ evidence so far, and a passing acceptance criterion. Progress is tracked in
 - *Acceptance:* `make test` (or the documented test command) passes on a
   clean checkout.
 
-## I-4 (LOW): Border is duplicated/pointless in mono
+## I-4 (LOW): Border/chrome not yet implemented
 
-The window outline is always full-white. In default black-and-white mode it's
-indistinguishable from the content boundary; only in rich mode does it add
-value. Decide in [Q-4](OPEN_QUESTIONS.md#q-4) whether to keep, style, or drop
-it.
+The current window outline is always full-white and adds nothing in default
+black-and-white mode. The direction is now settled by
+[D-Q4](./DECISIONS.md): reserve a **title strip**, show a **boxed Pause
+indicator**, and possibly a pause-time settings menu. Still open: *who*
+draws the chrome and how cheaply — see [Q-13](OPEN_QUESTIONS.md#q-13) and
+ROADMAP step 8.
 
 ## I-5 (LOW): Tone-period edge case
 

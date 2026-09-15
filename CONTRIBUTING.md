@@ -12,8 +12,9 @@ question, or known issue; details and acceptance criteria are in
   [G-6](./GOALS.md#g-6-usable-tooling-one-obvious-command). (ROADMAP step 3.)
 - Build-time `payload[0] == _start` assertion — hardens
   [I-7](./KNOWN_ISSUES.md#i-7). (ROADMAP step 2.)
-- `ArduboyTones` port (deferred follow-up) — informs
-  [Q-5](./OPEN_QUESTIONS.md#q-5). (ROADMAP step 9.)
+- `ArduboyTones` audio path in ArduboyLx — implements
+  [D-Q5](./DECISIONS.md#d-q5-support-both-beep-and-arduboytones-in-arduboylx-was-q-5).
+  (ROADMAP step 9.)
 
 ## How to run things
 
@@ -25,6 +26,7 @@ question, or known issue; details and acceptance criteria are in
 
 ## Process
 
-- Reference the relevant `G-`/`Q-`/`I-` identifier in the PR description.
-- When closing a `Q-`/`I-` item, mark it resolved in place (don't delete) in
-  the corresponding file so the decision history survives.
+- Reference the relevant `G-`/`Q-`/`I-`/`D-` identifier in the PR description.
+- When a question in [OPEN_QUESTIONS.md](./OPEN_QUESTIONS.md) is settled,
+  move it to [DECISIONS.md](./DECISIONS.md) (as `D-Q*`) rather than deleting
+  it or marking it in place, so the decision history survives in one place.

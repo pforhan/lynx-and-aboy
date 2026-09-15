@@ -9,8 +9,11 @@ identifier it serves.
 Provide a low-friction way to port Arduboy games to the Atari Lynx with
 **minimal or zero source changes**. Sketches written against the standard
 Arduboy2 API should compile and run on real Lynx hardware or emulators as-is.
-What "seamless" means precisely is still being decided — see
-[Q-1](OPEN_QUESTIONS.md#q-1).
+"Seamless" is now concretely defined by
+[D-Q1](./DECISIONS.md#d-q1-ship-an-arduboylx-api-layer-was-q-1): provide an
+**ArduboyLx** API that falls back to standard Arduboy semantics on the
+Arduboy platform, with the acceptance test *any sketch that builds unmodified
+on a stock Arduboy also builds unmodified for the Lynx and is playable*.
 
 ## G-2 (API fidelity): Keep the engine verbatim
 
@@ -25,9 +28,13 @@ Arduboy approach. Simple and portable.
 
 ## G-4 (Lynx-native extras without breaking Arduboy)
 
-Provide Lynx-only bonuses (rich 16-color palette, pause overlay, border
-chrome) via `#ifdef __LYNX__` so the *same* `.ino` still builds as a stock
-Arduboy sketch with the bonus code compiled out.
+Provide Lynx-only bonuses (rich 16-color palette, chrome around the game
+window, boxed pause indicator) via `#ifdef __LYNX__` so the *same* `.ino`
+still builds as a stock Arduboy sketch with the bonus code compiled out. The
+chrome direction is settled by
+[D-Q4](./DECISIONS.md#d-q4-chrome--title-strip--boxed-pause--settings-was-q-4):
+title space plus boxed pause overlay, with a possible pause-time settings
+menu.
 
 ## G-5 (evidence-based port): No guessed register values
 
@@ -45,6 +52,7 @@ clone → running game without digging.
 
 - G-1..G-5 are **partly met**: the core port builds end-to-end and loads in an
   emulator, but the two HIGH issues (color, frame rate) block the "playable
-  as-is" claim.
+  as-is" claim. The G-1/G-4 design direction is now settled
+  ([D-Q1](./DECISIONS.md), [D-Q4](./DECISIONS.md)) but not yet scaffolded.
 - G-6 is **not yet met**; the build scripts exist but have no help/error
   handling or pre-flight check.

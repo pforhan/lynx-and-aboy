@@ -18,6 +18,7 @@ drives the Lynx's Mikey/Suzy chips instead of the Atmega32u4/SSD1306.
 | File | Contents |
 | --- | --- |
 | [GOALS.md](./GOALS.md) | Project mission and principles (`G-*`) |
+| [DECISIONS.md](./DECISIONS.md) | Settled design decisions (`D-Q*`) |
 | [OPEN_QUESTIONS.md](./OPEN_QUESTIONS.md) | Design decisions not yet settled (`Q-*`) |
 | [KNOWN_ISSUES.md](./KNOWN_ISSUES.md) | Bugs, gaps, and hazards (`I-*`) |
 | [ROADMAP.md](./ROADMAP.md) | Discrete, testable work items in order |
@@ -142,8 +143,9 @@ emulator and on real hardware (see the manual checklist in `NOTES.md`), plus
 the follow-up ArduboyTones port.
 
 **Known blockers:** [I-1](KNOWN_ISSUES.md#i-1) (everything renders green) and
-[I-2](KNOWN_ISSUES.md#i-2) (~5 FPS vs 59.9 target) — both block the
-"playable as-is" claim. The biggest open decision is
-[Q-1](OPEN_QUESTIONS.md#q-1) (what "seamless" means). Scoped candidate work,
-including the `G-6` tooling pre-flight check and `I-3` host tests, is in
+[I-2](KNOWN_ISSUES.md#i-2) (~5 FPS, target ~30 per [D-Q6](DECISIONS.md#d-q6)).
+The overall direction is settled in [DECISIONS.md](./DECISIONS.md) (including
+the ArduboyLx API and chrome design); design details still pending are in
+[OPEN_QUESTIONS.md](./OPEN_QUESTIONS.md). Scoped candidate work, including
+the `G-6` tooling pre-flight check and `I-3` host tests, is in
 [CONTRIBUTING.md](./CONTRIBUTING.md) and [ROADMAP.md](./ROADMAP.md).

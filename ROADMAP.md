@@ -6,9 +6,13 @@ the `G-` / `Q-` / `I-` items it serves, prerequisites, concrete tasks, and
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done.
 
-Legend for links: **G** = [GOALS.md](./GOALS.md), **Q** =
+Objects referenced: **G** = [GOALS.md](./GOALS.md), **Q** =
 [OPEN_QUESTIONS.md](./OPEN_QUESTIONS.md), **I** =
-[KNOWN_ISSUES.md](./KNOWN_ISSUES.md).
+[KNOWN_ISSUES.md](./KNOWN_ISSUES.md), **D** =
+[DECISIONS.md](./DECISIONS.md) (settled questions).
+
+Settled design decisions (D-Q*) are *inputs* to steps here; open questions
+(Q-*) are *blockers* or topics a step must resolve.
 
 ---
 
@@ -153,47 +157,57 @@ Exit criteria:
 
 ### 6. Survey real Arduboy games for `sBuffer` direct access `[ ]`
 
-Serves: Q-2 · informs Q-1 and Step 7.
+Serves: Q-2 · informs G-1 and Step 7.
 
 Tasks:
 
 - [ ] Pick 8-10 popular open-source Arduboy games (e.g. Arduboy collection,
       "Tracy+", game jam winners).
 - [ ] For each: does it use `sBuffer` directly, `Sprites`, `display()`
-      frequency, and any third-party libs? Record a classification table in
-      `NOTES.md`.
+      frequency, and any third-party libs? Note which Arduboy API version
+      each targets. Record a classification table in `NOTES.md`.
 - [ ] Build the ones that use only the supported surface unmodified for the
       Lynx; record which fail and why.
+- [ ] Answer Q-2's detection followup: can sBuffer direct use be detected
+      (build-time analysis vs. observable at runtime), or is the 1bpp layer
+      unavoidable? Feeds the Q-12 architecture fork.
 
 Exit criteria:
 
 - [ ] A classification table exists in `NOTES.md` with a per-game "builds
       unmodified?" column.
 - [ ] A concrete answer to "what must work for a drop-in port" is recorded,
-      feeding the G-1 acceptance test.
+      feeding the G-1 acceptance test (see
+      [D-Q1](./DECISIONS.md#d-q1-ship-an-arduboylx-api-layer-was-q-1)).
+- [ ] Q-2's detection followup has a recorded answer or an explicit
+      "cannot detect — keep 1bpp semantics."
 
-### 7. Raise the frame rate to a predictable target `[ ]`
+### 7. Raise the frame rate to the D-Q6 target `[ ]`
 
-Serves: I-2, Q-6 · Prereq: Steps 1 (baseline FPS) and 6 (know the real
-workload) inform the target. Step 5 makes the visuals trustworthy enough to
-see the result of optimization.
+Serves: I-2 · target set by D-Q6. Prereq: Steps 1 (baseline FPS) and 6
+(know the real workload) inform the work. Step 5 makes the visuals trustworthy
+enough to see the result of optimization.
+
+Target: **~30 FPS as the first milestone, pushing as high as possible**
+([D-Q6](./DECISIONS.md)); Lynx games and the demo's `setFrameRate(30)` both
+suggest 30 is a realistic floor to beat.
 
 Tasks:
 
-- [ ] Decide and record the target FPS (59.9 vs a steady 30) per Q-6, using
-      Step 1's measurement method as the benchmark.
+- [ ] Establish the Step 1 measurement as the regression benchmark.
 - [ ] Profile the hot path: instrument `paintScreen()` inner loop cost; try
       (a) precomputed per-row nibble lookup table eliminating the
       `alphaPixel()` call, (b) hoisting the border to a one-time scratch
-      "chrome" buffer combined at swap, (c) skipping the border entirely in
-      mono mode if Q-4 says so.
+      "chrome" buffer combined at swap (see Step 8), (c) skipping the border
+      entirely in mono mode if Q-13 says so.
 - [ ] Re-measure after each change and record the delta in `NOTES.md`. Keep
-      the change that meets the target; keep others documented for reference.
+      the change that meets the D-Q6 target; keep others documented for
+      reference.
 
 Exit criteria:
 
-- [ ] FPS at/above the chosen target for ≥100 frames via Step 1's method,
-      on the emulator we support, with zero visible tearing/flicker.
+- [ ] FPS at/above the ~30 FPS D-Q6 target for ≥100 frames via Step 1's
+      method, on the emulator we support, with zero visible tearing/flicker.
 - [ ] `paintScreen()` correctness unchanged — Step 4 golden-frame test still
       green.
 
@@ -201,20 +215,27 @@ Exit criteria:
 
 ## Phase 4 — Lynx-native polish
 
-### 8. Decide and implement the border/chrome `[ ]`
+### 8. Implement the border/chrome per D-Q4 `[ ]`
 
-Serves: Q-4, I-4 · Prereq: Step 7 (chrome must not hurt FPS).
+Serves: I-4 · direction set by D-Q4; ownership still open (Q-13) · Prereq:
+Step 7 (chrome must not hurt FPS).
+
+The *what* is decided ([D-Q4](./DECISIONS.md)): title strip space, boxed Pause
+indicator over the center, and possibly a pause-time settings menu. The *who*
+(how it's driven, how cheaply) is still open.
 
 Tasks:
 
-- [ ] Decide who controls chrome (game vs automatic) and what it shows per
-      Q-4; record the decision in `NOTES.md`.
+- [ ] Resolve Q-13 (framework-driven vs game-driven vs hybrid chrome) and
+      record the decision in `NOTES.md`.
 - [ ] Render the chosen chrome cheaply — if automatic, stamp it once into the
       static border region (or a separate chroma plane) so it isn't redrawn
       per pixel every frame.
-- [ ] On Pause, show the `PAUSED` overlay in the chrome area (not just a
-      black band over the game), and surface system hints ("Option 1 =
-      palette") there.
+- [ ] On Pause, show the boxed pause indicator over the center of the game
+      window (per D-Q4), and surface system hints ("Option 1 = palette")
+      in the title strip.
+- [ ] If the pause-time settings menu is in scope, spec and implement it
+      (chrome on/off, title display, etc.).
 
 Exit criteria:
 
@@ -227,10 +248,14 @@ Exit criteria:
 
 ## Phase 5 — Ecosystem
 
-### 9. Port ArduboyTones `[ ]`
+### 9. Implement both audio paths (Beep + ArduboyTones) `[ ]`
 
-Serves: Q-5 · Prereq: Steps 4 and 7 (need a testable audio path and a
+Serves: D-Q5 · Prereq: Steps 4 and 7 (need a testable audio path and a
 working frame budget).
+
+[D-Q5](./DECISIONS.md) settles the *what*: ArduboyLx supports both the Beep
+mapping and an ArduboyTones port, delegating to the "real" libraries when
+compiling for the Arduboy.
 
 Tasks:
 
@@ -239,41 +264,52 @@ Tasks:
 - [ ] Add a tone-stack host test (sequences play in the right order/timing)
       using the Step 4 harness.
 - [ ] Build the upstream ArduboyTones demo sketch unmodified for the Lynx.
+- [ ] Define the ArduboyLx audio API shape so both paths live behind one
+      interface (Beep-based vs Tones-based games pick transparently).
 
 Exit criteria:
 
 - [ ] The ArduboyTones demo sketch builds unmodified and produces audible,
       correctly-sequenced tones on the emulator (and hardware if available).
 - [ ] Host test for the tone stack is green.
+- [ ] Beep-based sketches from Step 6 still sound unchanged.
 
 ### 10. ArduboyG-style 4-color reference port `[ ]`
 
-Serves: Q-3 · Prereq: Steps 7 and 9 (frame budget + audio surface).
+Serves: Q-3, Q-10 · Prereq: Steps 7 and 9 (frame budget + audio surface).
 
-A dedicated example that maps ArduboyG's 4 gray levels onto a 4-color Lynx
-palette — and doubles as the reference for third-party Lynx libraries.
+[Q-3](./OPEN_QUESTIONS.md#q-3) leaning: support ArduboyG natively and
+delegate to upstream ArduboyG on the Arduboy platform. This step does the
+API research and a reference port to decide on evidence.
 
 Tasks:
 
-- [ ] Port the ArduboyG pattern as `examples/lynx-g` (X gray levels → 4 Lynx
+- [ ] Research the ArduboyG API surface (display ownership, coexistence with
+      Arduboy2 in one sketch, 4-gray frame model).
+- [ ] Decide the substrate with Q-10 (4bpp palette mapping vs 2bpp display
+      mode); record in `NOTES.md`.
+- [ ] Port the ArduboyG pattern as `examples/lynx-g` (4 gray levels → 4 Lynx
       colors; high frame rate preserved).
 - [ ] Measure its FPS with Step 1's method; record in `NOTES.md`.
 
 Exit criteria:
 
-- [ ] `examples/lynx-g` reaches the chosen target FPS and renders distinct,
+- [ ] `examples/lynx-g` reaches the D-Q6 target FPS and renders distinct,
       correctly-colored levels (screenshot).
-- [ ] Q-3 is answered on evidence (dedicated path vs. a general frame-
-      stacking API).
+- [ ] Q-3 and Q-10 are answered on evidence (dedicated path vs. a general
+      frame-stacking API; which display substrate).
 
 ---
 
 ## Phase 6 — Hardware truth
 
-### 11. Real-hardware verification pass `[ ]`
+### 11. Real-hardware verification pass (optional, maintainer-only) `[ ]`
 
-Serves: G-5, Q-7, Q-8 · Prereq: Steps 5 and 7 (correct colors + playable
-frame rate).
+Serves: G-5, Q-7 · Prereq: Steps 5 and 7 (correct colors + playable frame
+rate).
+
+[D-Q8](./DECISIONS.md) makes this optional: emulators are the primary
+verification target for now. Run this pass when hardware is available.
 
 Tasks:
 
@@ -283,7 +319,7 @@ Tasks:
 - [ ] If any fix diverges from emulator behavior, reconcile which emulator
       core to trust and record it.
 
-Exit criteria:
+Exit criteria (when run):
 
 - [ ] The `NOTES.md` manual checklist passes on real hardware, with a
       timestamp and unit revision recorded.
@@ -293,12 +329,14 @@ Exit criteria:
 
 ## Definition of done (project-wide)
 
-The port is "seamless" per G-1 when all of the following hold:
+The port is "seamless" per [D-Q1](./DECISIONS.md#d-q1) when all of the
+following hold:
 
 - [ ] Any Arduboy2 sketch from the Step 6 survey's "supported surface" class
       builds **unmodified** for the Lynx and is playable.
-- [ ] The demo runs at the target FPS with correct colors on ≥2 emulator
-      cores **and** real hardware.
+- [ ] The demo runs at the D-Q6 target FPS with correct colors on ≥2 emulator
+      cores; real hardware is a maintainer-only bonus pass
+      ([D-Q8](./DECISIONS.md)).
 - [ ] `make test` (Step 4) passes; build fails loudly on toolchain/layout
       problems (Steps 2-3).
 - [ ] Documentation is in sync: README quickstart, NOTES.md register truth,
