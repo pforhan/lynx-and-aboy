@@ -29,10 +29,14 @@ drives the Lynx's Mikey/Suzy chips instead of the Atmega32u4/SSD1306.
 
 - 128x64 Arduboy game buffer centered on the Lynx's 160x102 panel
   (default: black & white, like an Arduboy; 59.9 FPS).
+- Color comes from the Lynx's **master palette** (`$FDA0-$FDBF`): the 4bpp
+  framebuffer stores palette indices, not direct colors (see NOTES.md).
 - **Lynx-only bonus (auto-gated by `#ifdef __LYNX__`):**
   - **Option 1** switches to a rich 16-color palette instead of B/W.
   - **Pause** button pops up a `PAUSED` overlay and halts the game until
     pressed again.
+- `Sprites` blits ride Suzy's hardware sprite engine when possible, with a
+  portable software fallback (D-Q9).
 - Double-buffered via `DISPADR` swapping at the frame boundary (no tearing).
 - Buttons mapped from the Lynx keypad (Up/Down/Left/Right + A/B); the
   LEFTHAND/SRSYS swap is honored for left-handed units.
@@ -142,10 +146,14 @@ emulates in recent Mednafen. Remaining: an eyeball check of the demo on an
 emulator and on real hardware (see the manual checklist in `NOTES.md`), plus
 the follow-up ArduboyTones port.
 
-**Known blockers:** [I-1](KNOWN_ISSUES.md#i-1) (everything renders green) and
-[I-2](KNOWN_ISSUES.md#i-2) (~5 FPS, target ~30 per [D-Q6](DECISIONS.md#d-q6)).
-The overall direction is settled in [DECISIONS.md](./DECISIONS.md) (including
-the ArduboyLx API and chrome design); design details still pending are in
+**Known blockers:** [I-1](KNOWN_ISSUES.md#i-1) (everything renders green —
+likely because the master palette is never programmed, per
+[Q-7](OPEN_QUESTIONS.md#q-7)) and [I-2](KNOWN_ISSUES.md#i-2) (~5 FPS, target
+~30 per [D-Q6](DECISIONS.md#d-q6)). Design is settled in
+[DECISIONS.md](./DECISIONS.md) — ArduboyLx API (D-Q1/D-Q12), chrome (D-Q4/
+D-Q13), Suzy sprites (D-Q9), 4bpp display substrate (D-Q10), build-time size/
+FX guard (D-Q11). Details still pending (sprite-flags mapping, FX-flash
+substitute, native/1bpp coexistence, ...) are in
 [OPEN_QUESTIONS.md](./OPEN_QUESTIONS.md). Scoped candidate work, including
 the `G-6` tooling pre-flight check and `I-3` host tests, is in
 [CONTRIBUTING.md](./CONTRIBUTING.md) and [ROADMAP.md](./ROADMAP.md).

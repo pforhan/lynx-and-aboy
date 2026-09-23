@@ -47,24 +47,32 @@ Exit criteria:
 
 ## Phase 1 — Hardening (make regressions loud)
 
-### 2. Assert the BLL payload entry point at build time `[ ]`
+### 2. Assert the BLL payload entry point and image budget at build time `[ ]`
 
-Serves: I-7 · Prereq: Step 1 not required.
+Serves: I-7, D-Q11 · Prereq: Step 1 not required.
 
 The zero-page/BLL layout trap (`payload[0]` must be `_start`, not data) is
-silently easy to regress. Make the build fail loudly if it does.
+silently easy to regress, and an oversized or FX-backed image is a silent
+"runs on Arduboy, not on Lynx" trap of its own
+([D-Q11](./DECISIONS.md#d-q11)). Make the build fail loudly on both.
 
 Tasks:
 
 - [ ] Add a `build-lynx.sh` post-link check that disassembles/reads
       `payload[0]` and asserts it equals `_start` (= `a9 00 85 00` prologue
       or the linker symbol), else print the "INSERT GAME" hazard and exit 1.
+- [ ] Size/FX guard per D-Q11: `build-lynx.sh` reports the emitted image size
+      and fails if static/FX-style assets exceed the RAM image budget or the
+      sketch references FX-chip APIs (the Lynx has no FX flash). See Q-16 for
+      the long-term answer.
 - [ ] Add a negative test: temporarily build with the *stock* platform link
       script and confirm the check fails; revert.
 
 Exit criteria:
 
 - [ ] A deliberately-broken layout fails `build-lynx.sh` with a clear message.
+- [ ] A sketch that exceeds the RAM/storage budget fails the build with a
+      clear "won't fit on Lynx" message.
 - [ ] Clean build passes and the image still loads; test covered in Step 4's
       harness.
 
@@ -129,25 +137,37 @@ Serves: I-1, Q-7.
 
 *High priority — this is the visible symptom blocking the "playable" claim.*
 
+The 2026-09-23 answer to [Q-7](./OPEN_QUESTIONS.md#q-7) corrects the model:
+the framebuffer holds **4-bit palette indices**, not direct GRB colors, and
+colors come from the master palette (`$FDA0-$FDBF`). The renderer writes raw
+GRB values (`0x07`, `richPal[]`) without programming the palette — strong new
+hypothesis 0 for "everything green".
+
 Tasks:
 
+- [ ] **Palette hypothesis 0 (new):** check whether the default master palette
+      maps the indices the renderer already writes (`0x07`, `richPal[]`) to the
+      intended colors. Program slots 0 and 7 (B/W) explicitly in
+      `Arduboy2Core::boot()` and see if white turns white.
 - [ ] Cross-check the green symptom on a second emulator (Handy is a good
       second core; BLL loader under Handy if needed) to rule hypothesis 1 of
       I-1 (emulator interpretation).
 - [ ] Verify `DISPCTL` really reads `0x0D` (color + 4-bit + DMA) at runtime;
       rule out hypothesis 2.
-- [ ] Write a 2-emulator + hardware grid: render a 16-color test pattern
-      (all 4-bit GRB values on screen), snapshot on each, and compare against
-      the documented GRB colors. Recording the pattern in `NOTES.md` captures
-      hypothesis 3 (nibble endianness) if panels disagree with docs.
+- [ ] Write a 2-emulator + hardware grid: render a 16-color test pattern that
+      **programs the master palette** (each of the 16 slots = a distinct
+      GRB shade), snapshot on each, and compare against the programmed values.
+      Recording the pattern in `NOTES.md` captures hypothesis 3 (nibble/register
+      packing) if panels disagree with docs.
 - [ ] Apply the smallest change that makes white = white in the target
-      renderer(s); update `INK_MONO`/`richPal` or the nibble packing as the
-      evidence demands.
+      renderer(s); switch `INK_MONO`/`richPal` to palette-**index** writes and
+      add one palette-init routine that both `paintScreen()` and the Suzy
+      sprite path (D-Q9) share.
 
 Exit criteria:
 
-- [ ] `F9` framebuffer png shows pure white (`0x07`) pixels as white on ≥2
-      emulator cores, and the 16-color pattern matches documented GRB.
+- [ ] `F9` framebuffer png shows pure white pixels as white on ≥2
+      emulator cores, and the 16-color pattern matches the programmed palette.
 - [ ] Rich palette (`Option 1`) shows 16 distinct, correctly-colored columns.
 - [ ] Golden-frame test (Step 4) updated to encode the corrected output.
 
@@ -168,9 +188,13 @@ Tasks:
       each targets. Record a classification table in `NOTES.md`.
 - [ ] Build the ones that use only the supported surface unmodified for the
       Lynx; record which fail and why.
-- [ ] Answer Q-2's detection followup: can sBuffer direct use be detected
-      (build-time analysis vs. observable at runtime), or is the 1bpp layer
-      unavoidable? Feeds the Q-12 architecture fork.
+- [ ] Answer Q-2's detection followup: pick between build-time static analysis,
+      a `#define`-toggled buffer/accessor, and runtime markers (see Q-2 answer),
+      or record "cannot detect — keep 1bpp semantics." Feeds the D-Q12
+      native-surface coexistence question (Q-18).
+- [ ] Classify survey games by API family (classic `Arduboy` vs `Arduboy2`) but
+      treat the breakout as informational — the Q-2 answer is that as-is
+      source for *both* families must compile directly (see D-Q12).
 
 Exit criteria:
 
@@ -179,7 +203,7 @@ Exit criteria:
 - [ ] A concrete answer to "what must work for a drop-in port" is recorded,
       feeding the G-1 acceptance test (see
       [D-Q1](./DECISIONS.md#d-q1-ship-an-arduboylx-api-layer-was-q-1)).
-- [ ] Q-2's detection followup has a recorded answer or an explicit
+- [ ] Q-2's detection followup has a recorded decision or an explicit
       "cannot detect — keep 1bpp semantics."
 
 ### 7. Raise the frame rate to the D-Q6 target `[ ]`
@@ -198,8 +222,12 @@ Tasks:
 - [ ] Profile the hot path: instrument `paintScreen()` inner loop cost; try
       (a) precomputed per-row nibble lookup table eliminating the
       `alphaPixel()` call, (b) hoisting the border to a one-time scratch
-      "chrome" buffer combined at swap (see Step 8), (c) skipping the border
-      entirely in mono mode if Q-13 says so.
+      "chrome" buffer combined at swap (see Step 8), (c) stamping the
+      border/chrome once and only re-inking it when it changes per
+      [D-Q13](./DECISIONS.md#d-q13), (d) a spike driving `Sprites` through
+      Suzy's SPRDISP/SPRCTL path per
+      [D-Q9](./DECISIONS.md#d-q9) to cut per-sprite CPU cost (fall back to
+      `SpritesLynx.cpp` otherwise).
 - [ ] Re-measure after each change and record the delta in `NOTES.md`. Keep
       the change that meets the D-Q6 target; keep others documented for
       reference.
@@ -215,22 +243,25 @@ Exit criteria:
 
 ## Phase 4 — Lynx-native polish
 
-### 8. Implement the border/chrome per D-Q4 `[ ]`
+### 8. Implement the hybrid border/chrome per D-Q4 + D-Q13 `[ ]`
 
-Serves: I-4 · direction set by D-Q4; ownership still open (Q-13) · Prereq:
-Step 7 (chrome must not hurt FPS).
+Serves: I-4 · direction set by D-Q4, ownership settled by
+[D-Q13](./DECISIONS.md#d-q13) (hybrid) · Prereq: Step 7 (chrome must not hurt
+FPS).
 
 The *what* is decided ([D-Q4](./DECISIONS.md)): title strip space, boxed Pause
 indicator over the center, and possibly a pause-time settings menu. The *who*
-(how it's driven, how cheaply) is still open.
+and *how cheaply* are also decided ([D-Q13](./DECISIONS.md)): the framework
+draws the chrome, re-inking only on change, and exposes small game tweak
+methods.
 
 Tasks:
 
-- [ ] Resolve Q-13 (framework-driven vs game-driven vs hybrid chrome) and
-      record the decision in `NOTES.md`.
-- [ ] Render the chosen chrome cheaply — if automatic, stamp it once into the
-      static border region (or a separate chroma plane) so it isn't redrawn
-      per pixel every frame.
+- [ ] Implement the hybrid model per D-Q13: the framework draws the chrome
+      (title strip, boxed pause, settings) by default, stamping it once and
+      re-inking only when it changes; record the model in `NOTES.md`.
+- [ ] Expose the small game-tweak methods D-Q13 calls for (e.g. title area for
+      HP, location name) behind the same API.
 - [ ] On Pause, show the boxed pause indicator over the center of the game
       window (per D-Q4), and surface system hints ("Option 1 = palette")
       in the title strip.
@@ -239,16 +270,50 @@ Tasks:
 
 Exit criteria:
 
-- [ ] The decided chrome is visible and correctly rendered on ≥2 emulator
+- [ ] The hybrid chrome is visible and correctly rendered on ≥2 emulator
       cores (screenshot in repo).
 - [ ] FPS regression vs Step 7 baseline ≤ the Step 7 measurement tolerance.
-- [ ] I-4 is resolved (border decision recorded).
+- [ ] I-4 is resolved (border decision recorded; D-Q13 ownership closes the
+      open question).
+
+### 9. Scaffold the ArduboyLx API layer `[ ]`
+
+Serves: D-Q1, D-Q12 · Prereq: Steps 4 and 5 (host-test harness + trustworthy
+colors) are useful context.
+
+[D-Q1](./DECISIONS.md#d-q1-ship-an-arduboylx-api-layer-was-q-1) promises an
+`ArduboyLx` API that falls back to standard Arduboy semantics on the Arduboy;
+[D-Q12](./DECISIONS.md#d-q12) shapes its Lynx side: expose the native 4bpp
+palette-indexed framebuffer through **methods** (not a public variable), with
+ArduboyLx owning the double-buffer swap. Stock 1bpp sketches keep byte-exact
+semantics (G-1).
+
+Tasks:
+
+- [ ] Define the ArduboyLx surface: framebuffer accessor methods
+      (`fbSetPixel(x, y, index)`, `fbGetPixel(...)`, maybe a `fbBuffer()`
+      pointer), how a game signals "present" (`flip()` vs reusing `display()`),
+      and how native and 1bpp draws coexist (see
+      [Q-18](./OPEN_QUESTIONS.md#q-18)).
+- [ ] Add `#if defined(__LYNX__)` native path + Arduboy-side fallbacks so the
+      same header builds on both backends (D-Q1).
+- [ ] Write a minimal `ArduboyLx.h` scaffold that compiles on both targets and
+      document the API contract in `NOTES.md`.
+- [ ] Fold the Q-2 "as-is source compiles directly" acceptance (both classic
+      `Arduboy` and `Arduboy2`) into the G-1 test.
+
+Exit criteria:
+
+- [ ] A new `examples/lynx-native` sketch compiles for both Lynx and Arduboy and
+      draws through the native surface while the demo still owns the swap.
+- [ ] The existing 1bpp demo still builds unmodified (drop-in mode intact).
+- [ ] D-Q12's "methods, not variables" interface is documented.
 
 ---
 
 ## Phase 5 — Ecosystem
 
-### 9. Implement both audio paths (Beep + ArduboyTones) `[ ]`
+### 10. Implement both audio paths (Beep + ArduboyTones) `[ ]`
 
 Serves: D-Q5 · Prereq: Steps 4 and 7 (need a testable audio path and a
 working frame budget).
@@ -274,20 +339,22 @@ Exit criteria:
 - [ ] Host test for the tone stack is green.
 - [ ] Beep-based sketches from Step 6 still sound unchanged.
 
-### 10. ArduboyG-style 4-color reference port `[ ]`
+### 11. ArduboyG-style 4-color reference port `[ ]`
 
-Serves: Q-3, Q-10 · Prereq: Steps 7 and 9 (frame budget + audio surface).
+Serves: Q-3 · Prereq: Steps 7 and 10 (frame budget + audio surface).
 
 [Q-3](./OPEN_QUESTIONS.md#q-3) leaning: support ArduboyG natively and
 delegate to upstream ArduboyG on the Arduboy platform. This step does the
-API research and a reference port to decide on evidence.
+API research and a reference port to decide on evidence. The substrate is
+already fixed by [D-Q10](./DECISIONS.md#d-q10) (4 master-palette slots on the
+4bpp frame) — see [Q-15](./OPEN_QUESTIONS.md#q-15) for the gray-level mapping.
 
 Tasks:
 
 - [ ] Research the ArduboyG API surface (display ownership, coexistence with
       Arduboy2 in one sketch, 4-gray frame model).
-- [ ] Decide the substrate with Q-10 (4bpp palette mapping vs 2bpp display
-      mode); record in `NOTES.md`.
+- [ ] Map the 4 gray levels onto 4 master-palette slots (slots per Q-15);
+      record in `NOTES.md`.
 - [ ] Port the ArduboyG pattern as `examples/lynx-g` (4 gray levels → 4 Lynx
       colors; high frame rate preserved).
 - [ ] Measure its FPS with Step 1's method; record in `NOTES.md`.
@@ -296,14 +363,14 @@ Exit criteria:
 
 - [ ] `examples/lynx-g` reaches the D-Q6 target FPS and renders distinct,
       correctly-colored levels (screenshot).
-- [ ] Q-3 and Q-10 are answered on evidence (dedicated path vs. a general
-      frame-stacking API; which display substrate).
+- [ ] Q-3 is answered on evidence (dedicated path vs. a general
+      frame-stacking API); the substrate question is closed by D-Q10.
 
 ---
 
 ## Phase 6 — Hardware truth
 
-### 11. Real-hardware verification pass (optional, maintainer-only) `[ ]`
+### 12. Real-hardware verification pass (optional, maintainer-only) `[ ]`
 
 Serves: G-5, Q-7 · Prereq: Steps 5 and 7 (correct colors + playable frame
 rate).
@@ -333,11 +400,17 @@ The port is "seamless" per [D-Q1](./DECISIONS.md#d-q1) when all of the
 following hold:
 
 - [ ] Any Arduboy2 sketch from the Step 6 survey's "supported surface" class
-      builds **unmodified** for the Lynx and is playable.
+      builds **unmodified** for the Lynx and is playable (classic `Arduboy`
+      and `Arduboy2` alike — D-Q12).
 - [ ] The demo runs at the D-Q6 target FPS with correct colors on ≥2 emulator
       cores; real hardware is a maintainer-only bonus pass
       ([D-Q8](./DECISIONS.md)).
-- [ ] `make test` (Step 4) passes; build fails loudly on toolchain/layout
-      problems (Steps 2-3).
+- [ ] `make test` (Step 4) passes; build fails loudly on toolchain/layout and
+      image-budget problems (Steps 2-3).
+- [ ] `Sprites` sketches run through Suzy with the software fallback intact
+      ([D-Q9](./DECISIONS.md)), and the native 4bpp surface exists
+      ([D-Q12](./DECISIONS.md), step 9).
+- [ ] Oversized / FX-backed builds fail at compile time with a clear message
+      ([D-Q11](./DECISIONS.md)).
 - [ ] Documentation is in sync: README quickstart, NOTES.md register truth,
       this roadmap, and the issue files.

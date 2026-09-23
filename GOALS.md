@@ -14,12 +14,19 @@ Arduboy2 API should compile and run on real Lynx hardware or emulators as-is.
 **ArduboyLx** API that falls back to standard Arduboy semantics on the
 Arduboy platform, with the acceptance test *any sketch that builds unmodified
 on a stock Arduboy also builds unmodified for the Lynx and is playable*.
+That "as-is" target covers **both** classic `Arduboy` and `Arduboy2` API
+families (Q-2 answer), and the Lynx-first surface is a native 4bpp
+palette-indexed framebuffer exposed through methods, with double-buffering
+hidden ([D-Q12](./DECISIONS.md#d-q12)).
 
 ## G-2 (API fidelity): Keep the engine verbatim
 
 Keep the platform-neutral Arduboy2 engine verbatim; only the hardware layer
 (`Arduboy2Core`, audio, the Arduino shim) is replaced. This keeps upstream
-parity easy and bug-for-bug compatible.
+parity easy and bug-for-bug compatible. One sanctioned carve-out
+([D-Q9](./DECISIONS.md)): the sprite *renderer* may use Suzy's native
+SPRDISP/SPRCTL path so long as the `Sprites` *API* surface stays verbatim and
+a portable software fallback (`SpritesLynx.cpp`) remains.
 
 ## G-3 (no-interrupt philosophy): Match the Arduboy model
 
@@ -34,7 +41,8 @@ still builds as a stock Arduboy sketch with the bonus code compiled out. The
 chrome direction is settled by
 [D-Q4](./DECISIONS.md#d-q4-chrome--title-strip--boxed-pause--settings-was-q-4):
 title space plus boxed pause overlay, with a possible pause-time settings
-menu.
+menu; ownership is hybrid — framework-drawn with small game-tweak methods
+([D-Q13](./DECISIONS.md#d-q13)).
 
 ## G-5 (evidence-based port): No guessed register values
 
@@ -51,8 +59,13 @@ clone → running game without digging.
 ## Status
 
 - G-1..G-5 are **partly met**: the core port builds end-to-end and loads in an
-  emulator, but the two HIGH issues (color, frame rate) block the "playable
-  as-is" claim. The G-1/G-4 design direction is now settled
-  ([D-Q1](./DECISIONS.md), [D-Q4](./DECISIONS.md)) but not yet scaffolded.
+  emulator, but the color issue ([I-1](KNOWN_ISSUES.md#i-1)) likely stems from
+  the unprogrammed master palette (Q-7) and the frame rate
+  ([I-2](KNOWN_ISSUES.md#i-2)) still blocks the "playable as-is" claim. Design direction is settled for the
+  ArduboyLx API ([D-Q1](./DECISIONS.md), [D-Q12](./DECISIONS.md)), chrome
+  ([D-Q4](./DECISIONS.md), [D-Q13](./DECISIONS.md)), sprites
+  ([D-Q9](./DECISIONS.md)), display substrate ([D-Q10](./DECISIONS.md)) and the
+  size/FX guard ([D-Q11](./DECISIONS.md)); the ArduboyLx surface is scaffolded
+  in ROADMAP step 9.
 - G-6 is **not yet met**; the build scripts exist but have no help/error
-  handling or pre-flight check.
+  handling or pre-flight check, and no image-budget guard (ROADMAP steps 2-3).

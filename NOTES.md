@@ -76,14 +76,33 @@ Zero-page off = 0; all addresses consistent with MonLynx/cc65 usage.
   B0=Outer(B). Pause key: `$FCB1` bit 0. Left-handed units swap the D-pad pairs.
 - Display control `DISPCTL` `$FD92`: B3=color(1)/mono(0), B2=4bit(1)/2bit(0),
   B1=flip(1)=mirror-h, B0=video-DMA enable. Used values: **color 4bpp = `0x0D`**,
-  mono 2bit = `0x05`.
+  mono 2bit = `0x05` (whether / when a 2-bit *display* path is worth using is
+  under review — [Q-17](OPEN_QUESTIONS.md#q-17); D-Q10 for now standardizes on
+  4bpp).
+- **Master palette (where colors actually live):** the framebuffer nibble is a
+  **palette index, not a color**. Colors are 4-bit channel intensities in two
+  16-byte register banks (4,096-color basis):
+  - Green: `$FDA0 + index` — 4-bit green in the low nibble.
+  - Red/Blue: `$FDB0 + index` — one byte carrying both, red in one nibble and
+    blue in the other (exact nibble order is cosmetic per side; pin it down on
+    each core — Q-7).
+  - e.g. palette slot 3 = a purple shade: write green to `$FDA3`, packed
+    red/blue to `$FDB3`. A palette-init routine should serve both the 4bpp
+    window renderer and Suzy sprites (D-Q9).
+- Suzy sprite color depths: 1bpp (2 colors), 2bpp (4 colors), 4bpp (16 colors)
+  — all selecting from the master palette. Arduboy `Sprites` assets are 1bpp,
+  so Suzy can blit them natively (D-Q9); those two "ink" values become palette
+  indices.
 - Display DMA start address `DISPADR` `$FD94`(lo)/`$FD95`(hi) → pointer into a
   framebuffer; hardware masks low 2 bits (4-byte alignment required).
   - 4bpp: 80 bytes/scanline (160px, even x = high nibble, odd x = low nibble).
     Framebuffer = 160×102×2 = **8160 bytes**. Scanline rows: 0..101.
   - Pixel (x,y) → byte `y*80 + (x>>1)`, nibble high if `x&1==0`.
-    4-bit color is GRB + intensity (bit0=blue, bit1=red, bit2=green,
-    bit3=brightness); **full white = `0x07`**, black = `0x00`.
+    The nibble is a 4-bit **palette index** into the master palette, not a
+    direct color. The renderer currently writes raw GRB-ish values (`0x07`,
+    `richPal[]`) without programming the palette — it only looks right if the
+    default palette happens to map those indices to the intended colors (see
+    [I-1](KNOWN_ISSUES.md#i-1) and [Q-7](OPEN_QUESTIONS.md#q-7)).
   - Display is continuous DMA: render into a *back* buffer and swap `DISPADR`
     at frame boundary to avoid tearing.
 - Mikey timers (`$FD00`-): each of TIM0..3 has BKUP,CTLA,CNT,CTLB.
@@ -124,8 +143,19 @@ Zero-page off = 0; all addresses consistent with MonLynx/cc65 usage.
   block. Matches Adafruit/SSD1306 layout (upstream `drawPixel`).
 - Expansion 1bpp→4bpp is done row-wise (128px = 64 output bytes/line, 2 nibbles
   combined per byte) so neighboring columns (even/odd) share one framebuffer
-  byte. Fast path = monochrome (on=`0x07`, off=`0x00`); rich-palette mode
-  (Lynx-only, Option1) substitutes per-row ink colors.
+  byte. Fast path = monochrome (on = palette index `0x07`, off = `0x00`);
+  rich-palette mode (Lynx-only, Option1) substitutes per-row ink indices. Both
+  assume a programmed palette (I-1/Q-7: the palette is not yet programmed).
+
+### Size / memory ceiling (D-Q11)
+
+- The Lynx BLL image loads into RAM: 64 KB bank, minus two 8160-byte
+  framebuffers (16,320 B) and the program/stack/zp. A stock Arduboy sketch is
+  already bounded by the Arduboy's **32 KB flash** (code + PROGMEM), so the
+  practical ceiling is the 32 KB target itself, not Lynx RAM. Anything beyond
+  32 KB on an Arduboy rides the FX chip, which the Lynx lacks
+  ([I-8](KNOWN_ISSUES.md#i-8)) — hence the build-time size/FX guard
+  ([D-Q11](DECISIONS.md#d-q11)).
 
 ### Feel / inputs
 
@@ -192,7 +222,13 @@ arduboy-lynx/
 - [x] Beep → Lynx audio channels; Arduboy2Audio → mute via volume 0
 - [x] Demo sample + build scripts (Lynx builds clean)
 - [x] Emulator smoke test: builds + loads in Mednafen (`-force_module lynx`)
+- [ ] Program the master palette and move the renderer to palette-index writes
+      (I-1 / Q-7 — likely the "everything green" fix)
 - [ ] Visual check of the demo in an emulator (manual, see checklist below)
+- [ ] Build-time image-size / FX-storage guard (D-Q11)
+- [ ] Sprites via Suzy SPRDISP with `SpritesLynx.cpp` fallback (D-Q9 / Q-14)
+- [ ] ArduboyLx scaffold: native 4bpp buffer exposed via methods (D-Q12)
+- [ ] Hybrid chrome: title strip + boxed pause, framework-drawn (D-Q4/D-Q13)
 - [ ] Verify `__LYNX__`-gated rich palette + pause bonus on hardware
 - [ ] ArduboyTones port (separate MLXXXp library) — deferred follow-up
 - [x] README finalize; NOTES → keep in sync
