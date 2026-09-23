@@ -4,11 +4,17 @@ Deliberately scoped, good-first-issue candidates. Each maps to a goal, open
 question, or known issue; details and acceptance criteria are in
 [ROADMAP.md](./ROADMAP.md).
 
-- Survey real Arduboy games for direct `sBuffer` access — evidence for
-  [Q-2](./OPEN_QUESTIONS.md#q-2). (ROADMAP step 6.)
+- Finish the Q-2 survey loop: build the step-6 "supported surface" games
+  unmodified for the Lynx and record failures — evidence for
+  [Q-2](./OPEN_QUESTIONS.md#q-2) / [D-Q18](./DECISIONS.md#d-q18).
+  (ROADMAP step 6.)
 - Program the master palette and render a 16-slot test grid — fires at
   [I-1](./KNOWN_ISSUES.md#i-1) / [Q-7](./OPEN_QUESTIONS.md#q-7). (ROADMAP
   step 5.)
+- Verify the 2-bit display mode (`DISPCTL = 0x05`) and wire it as the default
+  for unmodified B/W sketches — implements
+  [D-Q17](./DECISIONS.md#d-q17) / answers [Q-20](./OPEN_QUESTIONS.md#q-20).
+  (ROADMAP step 5.)
 - Golden-frame + button unit tests on the host — fixes
   [I-3](./KNOWN_ISSUES.md#i-3). (ROADMAP step 4.)
 - Toolchain pre-flight check script — serves

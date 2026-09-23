@@ -31,8 +31,12 @@ drives the Lynx's Mikey/Suzy chips instead of the Atmega32u4/SSD1306.
   (default: black & white, like an Arduboy; 59.9 FPS).
 - Color comes from the Lynx's **master palette** (`$FDA0-$FDBF`): the 4bpp
   framebuffer stores palette indices, not direct colors (see NOTES.md).
+- **2-bit display default for unmodified B/W programs** (`DISPCTL = 0x05`,
+  [D-Q17](./DECISIONS.md#d-q17)) — narrower scanlines free RAM and speed up
+  byte translation; 4bpp remains available for enhanced/native games.
 - **Lynx-only bonus (auto-gated by `#ifdef __LYNX__`):**
-  - **Option 1** switches to a rich 16-color palette instead of B/W.
+  - **Option 1** switches to a rich 16-color palette instead of B/W (cycles
+    through selectable presets per the Q-7 answer).
   - **Pause** button pops up a `PAUSED` overlay and halts the game until
     pressed again.
 - `Sprites` blits ride Suzy's hardware sprite engine when possible, with a
@@ -150,10 +154,11 @@ the follow-up ArduboyTones port.
 likely because the master palette is never programmed, per
 [Q-7](OPEN_QUESTIONS.md#q-7)) and [I-2](KNOWN_ISSUES.md#i-2) (~5 FPS, target
 ~30 per [D-Q6](DECISIONS.md#d-q6)). Design is settled in
-[DECISIONS.md](./DECISIONS.md) — ArduboyLx API (D-Q1/D-Q12), chrome (D-Q4/
-D-Q13), Suzy sprites (D-Q9), 4bpp display substrate (D-Q10), build-time size/
-FX guard (D-Q11). Details still pending (sprite-flags mapping, FX-flash
-substitute, native/1bpp coexistence, ...) are in
+[DECISIONS.md](./DECISIONS.md) — ArduboyLx API (D-Q1/D-Q12/D-Q18), chrome
+(D-Q4/D-Q13), Suzy sprites (D-Q9), ArduboyG hosting (D-Q3, lowest priority), 4bpp substrate +
+2-bit default (D-Q10/D-Q17), build-time size/FX guard (D-Q11/D-Q16). Details
+still pending (sprite-flags mapping, ArduboyG gray mapping, enhanced native
+surface, 2-bit pipeline details, ...) are in
 [OPEN_QUESTIONS.md](./OPEN_QUESTIONS.md). Scoped candidate work, including
 the `G-6` tooling pre-flight check and `I-3` host tests, is in
 [CONTRIBUTING.md](./CONTRIBUTING.md) and [ROADMAP.md](./ROADMAP.md).

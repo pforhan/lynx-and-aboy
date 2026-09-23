@@ -36,8 +36,10 @@ evidence so far, and a passing acceptance criterion. Progress is tracked in
      we ended up in mono 2-bit, the GRB encoding isn't applied at all.
 - *Acceptance:* after any fix, the manual color checklist in
   [NOTES.md](./NOTES.md) passes on at least two emulator cores, the master
-  palette is programmed so index 7 = white, with `mednafen`'s exact-framebuffer
-  snapshot (`F9`) confirming pure-white is truly white.
+  palette is programmed — default B/W + 2-gray preset (slots 0 = black,
+  7 = white, plus grays) per the Q-7 answer — so index 7 = white, with
+  `mednafen`'s exact-framebuffer snapshot (`F9`) confirming pure-white is
+  truly white.
 
 ## I-2 (HIGH): ~5 FPS in the Lynx emulator, target ~30
 
@@ -52,7 +54,9 @@ evidence so far, and a passing acceptance criterion. Progress is tracked in
 - *Ideas:* profile the hot loop; precompute nibble pairs per row to avoid
   the `alphaPixel`/palette function call per pixel; defer the border to a
   single setup pass rather than every paint ([D-Q13](./DECISIONS.md)); offload
-  sprite blits to Suzy's SPRDISP path ([D-Q9](./DECISIONS.md)).
+  sprite blits to Suzy's SPRDISP path ([D-Q9](./DECISIONS.md)); a **2-bit
+  display default** (narrower scanlines, less expansion work) is now accepted
+  — [D-Q17](./DECISIONS.md#d-q17), verified in ROADMAP step 5.
 - *Target:* [D-Q6](./DECISIONS.md) sets **~30 FPS as the realistic first
   milestone**, pushing as high as we can over time.
 - *Acceptance:* the demo holds a steady FPS at/above the D-Q6 target
@@ -106,9 +110,9 @@ persistence. Document it and consider a cartridge-RAM-backed option.
   FX chip's 4 MB flash (`FX` read APIs, `Sprites` `SpritesB` data). The Lynx
    has no FX chip and BLL images are RAM-resident, so such assets cannot be
   played back as-is.
-- *Something keeps the RAM image bounded anyway:* any stock Arduboy sketch +
-  data already fits 32 KB flash (D-Q11).
-- *Direction:* build-time guard that flags FX-API usage / oversized constant
-  data and fails the compile with a clear message
-  ([D-Q11](./DECISIONS.md)); long-term substitute for FX flash is still open
-  ([Q-16](OPEN_QUESTIONS.md#q-16)).
+- *Resolved by [D-Q16](./DECISIONS.md#d-q16):* squash everything into the
+  ~48 KB RAM image by default (a stock sketch is ≤ 32 KB and fits); detection
+  is build-time size analysis only and FX-API usage **fails the compile**
+  (the guard is [D-Q11](./DECISIONS.md#d-q11), ROADMAP step 2). Cartridge-ROM
+  reads of larger assets stay out of scope for non-modified games — a per-game
+  build flag is the escape hatch.

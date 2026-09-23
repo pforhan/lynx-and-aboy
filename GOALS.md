@@ -17,7 +17,8 @@ on a stock Arduboy also builds unmodified for the Lynx and is playable*.
 That "as-is" target covers **both** classic `Arduboy` and `Arduboy2` API
 families (Q-2 answer), and the Lynx-first surface is a native 4bpp
 palette-indexed framebuffer exposed through methods, with double-buffering
-hidden ([D-Q12](./DECISIONS.md#d-q12)).
+hidden ([D-Q12](./DECISIONS.md#d-q12)) as a pointer to the back buffer that
+`display()` flips automatically ([D-Q18](./DECISIONS.md#d-q18)).
 
 ## G-2 (API fidelity): Keep the engine verbatim
 
@@ -62,10 +63,13 @@ clone → running game without digging.
   emulator, but the color issue ([I-1](KNOWN_ISSUES.md#i-1)) likely stems from
   the unprogrammed master palette (Q-7) and the frame rate
   ([I-2](KNOWN_ISSUES.md#i-2)) still blocks the "playable as-is" claim. Design direction is settled for the
-  ArduboyLx API ([D-Q1](./DECISIONS.md), [D-Q12](./DECISIONS.md)), chrome
-  ([D-Q4](./DECISIONS.md), [D-Q13](./DECISIONS.md)), sprites
-  ([D-Q9](./DECISIONS.md)), display substrate ([D-Q10](./DECISIONS.md)) and the
-  size/FX guard ([D-Q11](./DECISIONS.md)); the ArduboyLx surface is scaffolded
-  in ROADMAP step 9.
+  ArduboyLx API ([D-Q1](./DECISIONS.md), [D-Q12](./DECISIONS.md),
+  [D-Q18](./DECISIONS.md)), chrome ([D-Q4](./DECISIONS.md),
+  [D-Q13](./DECISIONS.md)), sprites ([D-Q9](./DECISIONS.md)),
+  ArduboyG hosting ([D-Q3](./DECISIONS.md), lowest priority), display substrate
+  ([D-Q10](./DECISIONS.md), 2-bit default [D-Q17](./DECISIONS.md)), the
+  size/FX guard ([D-Q11](./DECISIONS.md), [D-Q16](./DECISIONS.md)); the
+  ArduboyLx surface is scaffolded in ROADMAP step 9. The Q-2 sBuffer survey
+  is classified (8 games, NOTES.md).
 - G-6 is **not yet met**; the build scripts exist but have no help/error
   handling or pre-flight check, and no image-budget guard (ROADMAP steps 2-3).

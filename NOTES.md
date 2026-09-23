@@ -76,19 +76,27 @@ Zero-page off = 0; all addresses consistent with MonLynx/cc65 usage.
   B0=Outer(B). Pause key: `$FCB1` bit 0. Left-handed units swap the D-pad pairs.
 - Display control `DISPCTL` `$FD92`: B3=color(1)/mono(0), B2=4bit(1)/2bit(0),
   B1=flip(1)=mirror-h, B0=video-DMA enable. Used values: **color 4bpp = `0x0D`**,
-  mono 2bit = `0x05` (whether / when a 2-bit *display* path is worth using is
-  under review — [Q-17](OPEN_QUESTIONS.md#q-17); D-Q10 for now standardizes on
-  4bpp).
+  mono 2bit = `0x05`. The 2-bit *display* mode is **real** and is the default
+  for unmodified B/W programs ([D-Q17](DECISIONS.md#d-q17)); 4bpp remains the
+  native/enhanced surface (D-Q10). Verify `0x05` (40-byte scanlines, ~4080-byte
+  framebuffer) when first tried — ROADMAP step 5. Caveat: 2-bit mode is rarely
+  used, so **emulators may not support it properly** — treat weird output as a
+  possible emulator gap ([D-Q20](DECISIONS.md#d-q20)).
 - **Master palette (where colors actually live):** the framebuffer nibble is a
   **palette index, not a color**. Colors are 4-bit channel intensities in two
   16-byte register banks (4,096-color basis):
   - Green: `$FDA0 + index` — 4-bit green in the low nibble.
-  - Red/Blue: `$FDB0 + index` — one byte carrying both, red in one nibble and
-    blue in the other (exact nibble order is cosmetic per side; pin it down on
-    each core — Q-7).
+  - Red/Blue: `$FDB0 + index` (`BLUERED0..F` aliases) — packed one per byte,
+    **blue in the upper nibble, red in the lower** (codified per
+    [D-Q7](DECISIONS.md#d-q7); confirm on each core in step 5's color grid).
   - e.g. palette slot 3 = a purple shade: write green to `$FDA3`, packed
     red/blue to `$FDB3`. A palette-init routine should serve both the 4bpp
     window renderer and Suzy sprites (D-Q9).
+  - **Default palette ([D-Q7](DECISIONS.md#d-q7), 2026-09-26):** stock B/W mode
+    is **black + white only** (slots 0 = black, 7 = white); other color options
+    (2-gray/4-gray presets, monochromes, CGA sets, Option-1 rich-palette
+    cycling) are **deferred**. Palette-init also reserves a few distinguishable
+    colors for the chrome (D-Q13) and enhanced use — unused for now.
 - Suzy sprite color depths: 1bpp (2 colors), 2bpp (4 colors), 4bpp (16 colors)
   — all selecting from the master palette. Arduboy `Sprites` assets are 1bpp,
   so Suzy can blit them natively (D-Q9); those two "ink" values become palette
@@ -133,7 +141,7 @@ Zero-page off = 0; all addresses consistent with MonLynx/cc65 usage.
   reload|count|clock-select. Shift-register bit 0 toggles output → square wave
   at `timer_rate/2`. Choose prescaler 1µs..64µs so backup ∈ [1,255].
 
-### Suzy sprite data format (drives D-Q9 / Q-14)
+### Suzy sprite data format (drives D-Q9 / D-Q14)
 
 - Lynx 1bpp sprite layout differs from Arduboy's: pixels are **horizontal
   scanline bytes** (Bit 7 = leftmost), each scanline is prefixed by a
@@ -149,7 +157,7 @@ Zero-page off = 0; all addresses consistent with MonLynx/cc65 usage.
   zero. Variants: handle >8px-tall sprites by stitching 8px bands; flip
   `(7 - col)` / row bit order to correct mirroring at compile time.
 - Dynamic/on-the-fly sprites (rare in Arduboy) fall back to a small RAM
-  scratchpad converted inside the drawing call (Q-14).
+  scratchpad converted inside the drawing call (D-Q14).
 - **Scope caveat:** this trick covers *sprite* data only. The 1bpp→4bpp frame
   transpose in `paintScreen()` renders a runtime-generated buffer, so it stays
   a per-frame cost (I-2) regardless of compile-time magic.
@@ -159,10 +167,12 @@ Zero-page off = 0; all addresses consistent with MonLynx/cc65 usage.
   (16,19). The CPU still pays the vertical→horizontal transpose, but Suzy
   absorbs the 1bpp→4bpp nibble packing and framebuffer stores and runs its own
   processor — freeing the CPU between `SPRGO` and VBL. Flip flags move into the
-  SCB. **B/W only** (a 1bpp sprite is ~2 palette indices), so it conflicts with
-  Option-1 rich per-row ink; chrome (D-Q13) is drawn separately and survives.
+  SCB. **B/W only** (a 1bpp sprite is ~2 palette indices) — consistent with the
+  default B/W palette ([D-Q7](DECISIONS.md#d-q7); the Option-1 rich per-row ink
+  that would conflict is deferred); chrome (D-Q13) is drawn separately and
+  survives.
   This is the benchmark behind ROADMAP step 7.
-- **Zero-transpose paint path (Q-18 candidate, drives I-2):** the alternate
+- **Zero-transpose paint path (D-Q18, drives I-2):** the alternate
   architecture is to skip the sBuffer→4bpp expansion entirely for API-only
   games: reimplement the draw API to write 4bpp-native nibbles into the back
   framebuffer. The geometry — centering `(19+dy)*80 + (8+(dx>>1))` and the
@@ -183,7 +193,10 @@ Zero-page off = 0; all addresses consistent with MonLynx/cc65 usage.
   `clear()` is 1 KB coalescable on one-shot vs a fan-out memset of the same
   region — rewrite `clear()` natively (4 KB nibble memset, or track cleared
   rows) for the native path. Select via build flag
-  `-DARDUBOYLX_PAINTPATH={one-shot|native|measure}`, default `one-shot`.
+  `-DARDUBOYLX_PAINTPATH={one-shot|native|measure|2bit}`, default `one-shot`
+  (`2bit` = the two-bit display mode, a distinct value with its own array math —
+  D-Q20; each of the one-shot and zero-transpose paths needs its own 2bpp
+  variant).
 - **Measuring harness (`measure` build option):** `-DARDUBOYLX_PAINTPATH=measure`
   enables the one-shot renderer plus a frame-timing collector. At the top of
   every `display()` call, snapshot a free-running Mikey timer; the expiry ISR
@@ -209,17 +222,22 @@ Zero-page off = 0; all addresses consistent with MonLynx/cc65 usage.
   combined per byte) so neighboring columns (even/odd) share one framebuffer
   byte. Fast path = monochrome (on = palette index `0x07`, off = `0x00`);
   rich-palette mode (Lynx-only, Option1) substitutes per-row ink indices. Both
-  assume a programmed palette (I-1/Q-7: the palette is not yet programmed).
+  assume a programmed palette (I-1/D-Q7: the palette is not yet programmed;
+  Option-1's per-row ink is deferred with the other color options).
 
-### Size / memory ceiling (D-Q11)
+### Size / memory ceiling (D-Q11 / D-Q16)
 
-- The Lynx BLL image loads into RAM: 64 KB bank, minus two 8160-byte
-  framebuffers (16,320 B) and the program/stack/zp. A stock Arduboy sketch is
-  already bounded by the Arduboy's **32 KB flash** (code + PROGMEM), so the
-  practical ceiling is the 32 KB target itself, not Lynx RAM. Anything beyond
-  32 KB on an Arduboy rides the FX chip, which the Lynx lacks
-  ([I-8](KNOWN_ISSUES.md#i-8)) — hence the build-time size/FX guard
-  ([D-Q11](DECISIONS.md#d-q11)).
+- The Lynx BLL image loads into RAM: 64 KB bank minus two 8160-byte 4bpp
+  framebuffers (16,320 B) = **~48 KB** for code + data + stack/zp.
+  [D-Q17](DECISIONS.md#d-q17)'s 2-bit display mode shrinks the framebuffers to
+  ~4080 B each, raising the budget to **~56 KB**. A stock Arduboy sketch
+  occupies ≤ 32 KB flash, so it fits comfortably; the guard exists for
+  anything that would have ridden the FX chip.
+- FX-backed assets: squash everything into the RAM image by default
+  ([D-Q16](DECISIONS.md#d-q16)); detection is build-time size analysis only,
+  and FX-API references fail the build until support is ever added. The
+  launcher idea (D-Q4) shares the same ROM image.
+- Hence the build-time size/FX guard ([D-Q11](DECISIONS.md#d-q11).
 
 ### Feel / inputs
 
@@ -228,8 +246,9 @@ Zero-page off = 0; all addresses consistent with MonLynx/cc65 usage.
   Right→RIGHT(`_BV(6)`), Inner(A)→A(`_BV(3)`), Outer(B)→B(`_BV(2)`).
   LEFTHAND is honored: Suzy **SPRSYS `$FC92` bit3** swaps Left↔Right when set.
 - Lynx-only extras: OPTION1 and PAUSE exposed as constants
-  (`#ifdef __LYNX__`). Option1 toggles rich-palette mode; Pause halts with an
-  overlay until pressed again.
+  (`#ifdef __LYNX__`). Option1's rich-palette cycling is **deferred**
+  (D-Q7) — it currently toggles the reserved chrome/enhanced ink; Pause halts
+  with an overlay until pressed again.
 
 ## Port layout
 
@@ -287,15 +306,38 @@ arduboy-lynx/
 - [x] Demo sample + build scripts (Lynx builds clean)
 - [x] Emulator smoke test: builds + loads in Mednafen (`-force_module lynx`)
 - [ ] Program the master palette and move the renderer to palette-index writes
-      (I-1 / Q-7 — likely the "everything green" fix)
+      (I-1 / Q-7 — likely the "everything green" fix); default B/W + 2-gray
+      preset + selectable presets (Q-7 answer)
+- [ ] Verify 2-bit display mode (`DISPCTL = 0x05`) and wire it as the default
+      for unmodified B/W sketches (D-Q17 / Q-20)
 - [ ] Visual check of the demo in an emulator (manual, see checklist below)
-- [ ] Build-time image-size / FX-storage guard (D-Q11)
+- [ ] Build-time image-size / FX-storage guard (D-Q11 / D-Q16)
 - [ ] Sprites via Suzy SPRDISP with `SpritesLynx.cpp` fallback (D-Q9 / Q-14)
 - [ ] ArduboyLx scaffold: native 4bpp buffer exposed via methods (D-Q12)
 - [ ] Hybrid chrome: title strip + boxed pause, framework-drawn (D-Q4/D-Q13)
 - [ ] Verify `__LYNX__`-gated rich palette + pause bonus on hardware
 - [ ] ArduboyTones port (separate MLXXXp library) — deferred follow-up
 - [x] README finalize; NOTES → keep in sync
+
+## sBuffer usage survey (Q-2, ROADMAP step 6)
+
+Classified 2026-09-26 — 8 popular open-source games, by how each frame is
+produced. Verdict: **method calls dominate**; direct buffer access is
+concentrated and mostly via `getBuffer()`, not raw `sBuffer[x]` pokes.
+
+| Game | Buffer access | Normal surface | Notes |
+| --- | --- | --- | --- |
+| Catecombs of the Damned (Arduboy3D) | `getBuffer()` in Platform.h | method calls | 3D renderer abstracts the platform |
+| ABC (interpreter/compiler) | assembly in `SpritesABC.cpp` | methods | a new abc backend could eliminate it |
+| MicroCity | `getBuffer()` (power display only) | methods | .ino bridges draw calls to arduboy methods |
+| DarkAndUnder | none | `drawCompressed` / `Sprites` | loads from flash |
+| Arduventure | sBuffer via Arglib (.h/.cpp) | bundled lib | library copied into source tree |
+| CastleBoy | none | `Sprites` only | — |
+| Mystic Balloon | none | `Sprites` only | — |
+| Bone Shakers | none | bitmaps + direct pixel | reads textures as sources |
+
+Both API families appear in the wild; per D-Q12, as-is source for **both**
+must compile directly (the per-family breakout is informational).
 
 ## Manual verification checklist (user-run)
 
