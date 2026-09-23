@@ -27,10 +27,11 @@ anything, capture a reliable baseline so fixes have a before/after.
 
 Tasks:
 
-- [ ] Add a repeatable FPS measurement: either a Lynx-only demo counter drawn
-      into the border area, or an emulator-based frame-count over wall-clock
-      (Mednafen framebuffer dumps). Note the environment (emulator, core,
-      host CPU, `-O` flags) in `NOTES.md`.
+- [ ] Add a repeatable FPS measurement via the **`measure` build option**
+      (`-DARDUBOYLX_PAINTPATH=measure`, one-shot renderer + frame-timing
+      harness — see `NOTES.md`), cross-checked against an emulator-based
+      frame-count over wall-clock (Mednafen framebuffer dumps). Note the
+      environment (emulator, core, host CPU, `-O` flags) in `NOTES.md`.
 - [ ] Capture before-fix screenshots: Mednafen `F9` exact-framebuffer PNG for
       boot logo, demo, inverted mode, rich palette, and Pause overlay.
 - [ ] Record the measured FPS and a description of exactly what "green" looks
@@ -192,6 +193,15 @@ Tasks:
       a `#define`-toggled buffer/accessor, and runtime markers (see Q-2 answer),
       or record "cannot detect — keep 1bpp semantics." Feeds the D-Q12
       native-surface coexistence question (Q-18).
+- [ ] Add a paint-path build flag (e.g. `-DARDUBOYLX_PAINTPATH={one-shot|native|measure}`)
+      selecting between the native-1bpp + one-shot convert, the zero-transpose
+      native-write path (Q-18), and the measuring-harness build
+      (`measure` = one-shot renderer + frame-timing instrumentation, which also
+      serves Step 1's FPS baseline and Step 7's regression benchmark).
+      **Default: `one-shot`** for now (predictable, matches heavy users); flip
+      per game when the survey/flag or the
+      crossover says native wins. Record the criterion in
+      `NOTES.md`.
 - [ ] Classify survey games by API family (classic `Arduboy` vs `Arduboy2`) but
       treat the breakout as informational — the Q-2 answer is that as-is
       source for *both* families must compile directly (see D-Q12).
@@ -227,7 +237,21 @@ Tasks:
       [D-Q13](./DECISIONS.md#d-q13), (d) a spike driving `Sprites` through
       Suzy's SPRDISP/SPRCTL path per
       [D-Q9](./DECISIONS.md#d-q9) to cut per-sprite CPU cost (fall back to
-      `SpritesLynx.cpp` otherwise).
+      `SpritesLynx.cpp` otherwise) — pre-transposing static sprite arrays to
+      Suzy scanline format at build time (constexpr wrapper) removes their
+      transpose from the frame budget entirely; see NOTES.md.
+- [ ] **Full-screen Suzy blit experiment** (see NOTES.md): transpose the live
+      sBuffer to a 1bpp sprite scratch (~1.1 KB) with an 8×8-LUT bit gather,
+      blit the whole 128×64 screen through Suzy, and diff the measured FPS
+      against the direct nibble path. Record the delta; keep the faster path.
+      Known limits: B/W only (rich Option-1 palette breaks), chrome must be
+      drawn separately.
+- [ ] **Zero-transpose paint path experiment** (Q-18): reimplement the draw
+      API to write 4bpp-native nibbles into the back buffer (compile-time
+      folded offset/clip, `display()` = DISPADR swap) and diff FPS against the
+      direct nibble path and the Suzy-blit path. API-only games are the win;
+      direct-`sBuffer` pokes fall back to a proxy shim or the 1bpp path. See
+      NOTES.md.
 - [ ] Re-measure after each change and record the delta in `NOTES.md`. Keep
       the change that meets the D-Q6 target; keep others documented for
       reference.

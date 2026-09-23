@@ -56,7 +56,8 @@ evidence so far, and a passing acceptance criterion. Progress is tracked in
 - *Target:* [D-Q6](./DECISIONS.md) sets **~30 FPS as the realistic first
   milestone**, pushing as high as we can over time.
 - *Acceptance:* the demo holds a steady FPS at/above the D-Q6 target
-  (measured over >100 frames) with no tearing/flicker.
+  (measured over >100 frames via the `measure` build option) with no
+  tearing/flicker.
 
 ## I-3 (MEDIUM): No automated visual/behavior verification
 

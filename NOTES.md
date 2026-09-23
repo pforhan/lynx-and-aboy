@@ -133,6 +133,70 @@ Zero-page off = 0; all addresses consistent with MonLynx/cc65 usage.
   reload|count|clock-select. Shift-register bit 0 toggles output → square wave
   at `timer_rate/2`. Choose prescaler 1µs..64µs so backup ∈ [1,255].
 
+### Suzy sprite data format (drives D-Q9 / Q-14)
+
+- Lynx 1bpp sprite layout differs from Arduboy's: pixels are **horizontal
+  scanline bytes** (Bit 7 = leftmost), each scanline is prefixed by a
+  **line-header byte** (offset/count to the next line), and the sprite ends
+  with a terminal `0x01` end-of-sprite marker. Arduboy `Sprites` data is
+  **vertical 8-bit columns** — so a bit-matrix transpose (8×8 block gather)
+  plus header injection is required before Suzy can blit.
+- **Preferred approach for static sprites (research 2026-09-23):** run the
+  transpose **at build time** — a `constexpr` wrapper `LynxSprite` with a
+  templated constructor and an implicit `operator const uint8_t*`, or a
+  macro-injected replacement for `const uint8_t xx[] PROGMEM` declarations —
+  so the ROM holds ready-to-blit Lynx data and the runtime transpose cost is
+  zero. Variants: handle >8px-tall sprites by stitching 8px bands; flip
+  `(7 - col)` / row bit order to correct mirroring at compile time.
+- Dynamic/on-the-fly sprites (rare in Arduboy) fall back to a small RAM
+  scratchpad converted inside the drawing call (Q-14).
+- **Scope caveat:** this trick covers *sprite* data only. The 1bpp→4bpp frame
+  transpose in `paintScreen()` renders a runtime-generated buffer, so it stays
+  a per-frame cost (I-2) regardless of compile-time magic.
+- **Full-screen Suzy blit (experiment candidate):** treat the whole 128×64
+  sBuffer as one big 1bpp sprite (64 scanlines × (header + 16 data bytes) +
+  end marker, ~1.1 KB scratch) and let Suzy expand it onto the 4bpp frame at
+  (16,19). The CPU still pays the vertical→horizontal transpose, but Suzy
+  absorbs the 1bpp→4bpp nibble packing and framebuffer stores and runs its own
+  processor — freeing the CPU between `SPRGO` and VBL. Flip flags move into the
+  SCB. **B/W only** (a 1bpp sprite is ~2 palette indices), so it conflicts with
+  Option-1 rich per-row ink; chrome (D-Q13) is drawn separately and survives.
+  This is the benchmark behind ROADMAP step 7.
+- **Zero-transpose paint path (Q-18 candidate, drives I-2):** the alternate
+  architecture is to skip the sBuffer→4bpp expansion entirely for API-only
+  games: reimplement the draw API to write 4bpp-native nibbles into the back
+  framebuffer. The geometry — centering `(19+dy)*80 + (8+(dx>>1))` and the
+  128×64 window clip — is **compile-time constant**, so each draw call folds to
+  immediate addressing (no lookup tables); `display()` then only swaps
+  DISPADR. The catch is byte semantics: `sBuffer[x]`/`getBuffer()` pokes have
+  1bpp vertical-byte meaning, so a proxy shim fans each byte-write out to eight
+  nibble writes (and eight gathers per read). Only never-changing art is truly
+  build-time; live frame contents are runtime by nature.
+- **When each paint path wins (selection criterion, feeds the build flag):**
+  fan-out proxy ≈ ~15-25 memory ops (~200 cyc @4 MHz) per raw byte-poke;
+  one-shot convert ≈ fixed ~8 ms per frame regardless of change volume. So:
+  *API-driven games earn the native path* (one pixel write per pixel — strictly
+  better than 1bpp+convert, which re-expands all pixels incl. untouched ones);
+  *light raw-pokers* (< ~200-300 byte-writes/frame, ~quarter screen) win
+  native; *heavy raw-pokers* (whole-screen byte clears/repaints) win one-shot
+  by ~6×. Read-back pokes are even costlier in native mode (8 gathers/byte).
+  `clear()` is 1 KB coalescable on one-shot vs a fan-out memset of the same
+  region — rewrite `clear()` natively (4 KB nibble memset, or track cleared
+  rows) for the native path. Select via build flag
+  `-DARDUBOYLX_PAINTPATH={one-shot|native|measure}`, default `one-shot`.
+- **Measuring harness (`measure` build option):** `-DARDUBOYLX_PAINTPATH=measure`
+  enables the one-shot renderer plus a frame-timing collector. At the top of
+  every `display()` call, snapshot a free-running Mikey timer; the expiry ISR
+  overflows a software counter so the 24-bit tick value never wraps, and the
+  delta (`now − last snapshot`) is time spent since the previous `display()`
+  — i.e. whole-frame workload (game logic + draw + `paintScreen`). Keep
+  running min/avg/max over the trailing ~60 frames; render the FPS once per
+  second in the border area (works on emulator and real silicon, no host
+  plumbing), with optional richer telemetry over COMlynx serial TX. Use a
+  timer **not** used by the sound code. Fully `#ifdef`-guarded — zero runtime
+  cost and zero code in the `one-shot`/`native` builds. This serves ROADMAP
+  step 1's baseline and step 7's regression benchmark.
+
 ### Lynx display vs Arduboy coordinate mapping
 
 - Real Lynx panel: 160×102. Games render in 4bpp to the full frame.
