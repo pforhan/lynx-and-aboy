@@ -140,3 +140,4 @@ priority additions from D-Q18, parked here until the method layer is done:
   order (Suzy blits). How do we guarantee ordering without a full compositor?
 - *Lowest priority:* a screen-sized Suzy sprite used as a scratchpad becomes
   more appealing once the two buffers can be addressed - revisit after D-Q18.
+  Note: screen-sized suzy sprite may be useable as a render path outside of lynx-first titles.
